@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>블록체인 링크 공유</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      background: #e5e5e5;
+      padding: 20px;
+    }
+    #info {
+      margin-bottom: 20px;
+      color: rgb(4,9,71);
+      font-weight: bold;
+    }
+    input[type=url] {
+      width: 70%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 10px 16px;
+      background: #ffe066;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-left: 8px;
+    }
+    ul#chatList {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+      list-style: none;
+    }
+    ul#chatList li {
+      margin-bottom: 12px;
+    }
+    .user {
+      color: #04377a;
+      font-weight: 700;
+    }
+    .timestamp {
+      font-size: 0.8rem;
+      color: #666;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="info"></div>
+  <input type="url" id="linkInput" placeholder="https://example.com" />
+  <button id="sendBtn">공유하기</button>
+  <ul id="chatList"></ul>
+
+  <script type="module">
+    import { ethers } from 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js';
+    
+    // 스마트컨트랙트 정보
+    const CONTRACT_ADDRESS = '0xYourDeployedContractAddressHere'; // 본인 컨트랙트 주소로 변경
+    const ABI = [
+      "event LinkShared(address indexed user, string link, uint256 timestamp)",
+      "function shareLink(string link) external"
+    ];
+
+    // 서버 주소
+    const SERVER_URL = 'http://localhost:3000';
+
+    // URL에서 닉네임, 지갑 주소 받기
+    const params = new URLSearchParams(window.location.search);
+    const userNickname = params.get('nickname') || '익명';
+    const walletAddress = params.get('wallet') || '';
+
+    document.getElementById('info').textContent = `사용자: ${userNickname} 지갑: ${walletAddress}`;
+
+    let provider, signer, contract;
+    let socket;
+
+    // UI에 메시지 추가
+    function addMessageToList(user, link, timestamp) {
+      const chatList = document.getElementById('chatList');
+      const li = document.createElement('li');
+      const shortUser = user.slice(0,6) + '...' + user.slice(-4);
+      // timestamp는 Date 객체 또는 숫자면 적절히 포맷
+      const timeStr = (timestamp instanceof Date) ? timestamp.toLocaleString() : new Date(timestamp).toLocaleString();
+
+      li.innerHTML = `<span class="user">${shortUser}</span>: <a href="${link}" target="_blank" rel="noopener">${link}</a> <span class="timestamp">${timeStr}</span>`;
+      chatList.appendChild(li);
+      chatList.scrollTop = chatList.scrollHeight;
+    }
+
+    // 메타마스크 연결 및 컨트랙트 세팅
+    async function connect() {
+      if (!window.ethereum) {
+        alert('MetaMask가 필요합니다!');
+        throw new Error('No MetaMask');
+      }
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send('eth_requestAccounts', []);
+      signer = provider.getSigner();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    }
+
+    // 스마트컨트랙트에 링크 공유 온체인 기록
+    async function shareLinkOnChain(link) {
+      if (!contract) await connect();
+      const tx = await contract.shareLink(link);
+      await tx.wait();
+    }
+
+    // 서버에 링크 저장 및 Socket.io 이벤트 처리
+    async function postLinkToServer(user, link) {
+      await fetch(`${SERVER_URL}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json'},
+        body: JSON.stringify({user, link}),
+      });
+    }
+
+    // Socket.io 연결 및 실시간 이벤트 수신
+    function setupSocket() {
+      socket = io(SERVER_URL);
+      socket.on('new-link', (data) => {
+        addMessageToList(data.user, data.link, data.timestamp);
+      });
+    }
+
+    // 서버로부터 기존 링크 불러오기
+    async function loadExistingLinks() {
+      const res = await fetch(`${SERVER_URL}/api/messages`);
+      const links = await res.json();
+      links.forEach(item => addMessageToList(item.user, item.link, item.timestamp));
+    }
+
+    // 공유 버튼 이벤트 핸들러
+    document.getElementById('sendBtn').addEventListener('click', async () => {
+      const linkInput = document.getElementById('linkInput');
+      const link = linkInput.value.trim();
+      if (!link) {
+        alert('링크를 입력하세요.');
+        return;
+      }
+      try {
+        new URL(link); // URL 유효성 검사
+      } catch {
+        alert('올바른 URL을 입력하세요.');
+        return;
+      }
+
+      try {
+        // 1) 서버에 저장 (중앙 DB + 실시간 알림)
+        await postLinkToServer(walletAddress || userNickname, link);
+        // 2) 온체인 기록 (옵션)
+        await shareLinkOnChain(link);
+        linkInput.value = '';
+      } catch (err) {
+        alert('링크 공유 실패: ' + err.message);
+      }
+    });
+
+    // 초기화 함수
+    (async () => {
+      try {
+        await connect();
+        setupSocket();
+        await loadExistingLinks();
+      } catch (err) {
+        alert('초기화 실패: ' + err.message);
+      }
+    })();
+  </script>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login & Wallet Connect</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #e5e5e5;
+      padding: 40px;
+      max-width: 400px;
+      margin: auto;
+    }
+    label, input, button {
+      display: block;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+    input, button {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: #ffe066;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>로그인 및 지갑 연결</h1>
+  <label for="nicknameInput">닉네임을 입력하세요</label>
+  <input type="text" id="nicknameInput" placeholder="닉네임" />
+  <button id="connectWalletBtn">지갑 연결 및 시작</button>
+
+  <script type="module">
+    import { ethers } from 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js';
+
+    let userNickname = '';
+    let walletAddress = '';
+
+    document.getElementById('connectWalletBtn').onclick = async () => {
+      userNickname = document.getElementById('nicknameInput').value.trim();
+      if (!userNickname) {
+        alert('닉네임을 입력하세요');
+        return;
+      }
+      if (!window.ethereum) {
+        alert('MetaMask가 필요합니다!');
+        return;
+      }
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send('eth_requestAccounts', []);
+      const signer = provider.getSigner();
+      walletAddress = await signer.getAddress();
+
+      const params = new URLSearchParams();
+      params.set('nickname', userNickname);
+      params.set('wallet', walletAddress);
+      window.location.href = 'page2.html?' + params.toString();
+    };
+  </script>
+</body>
+</html>
