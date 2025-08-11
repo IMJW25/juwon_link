@@ -116,12 +116,31 @@
 
     // 서버에 링크 저장 및 Socket.io 이벤트 처리
     async function postLinkToServer(user, link) {
-      await fetch(`${SERVER_URL}/api/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json'},
-        body: JSON.stringify({user, link}),
-      });
+      console.log('[DEBUG][프론트] POST 요청 시작:', SERVER_URL + '/api/messages', '데이터:', { user, link });
+      try {
+        const response = await fetch(`${SERVER_URL}/api/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user, link }),
+        });
+
+        console.log('[DEBUG][프론트] 응답 상태 코드:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[ERROR][프론트] 서버 응답 오류:', response.status, errorText);
+          throw new Error(`서버 오류 ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('[DEBUG][프론트] 서버 응답 데이터:', data);
+        return data;
+      } catch (error) {
+        console.error('[ERROR][프론트] fetch 실패:', error);
+        throw error;
+      }
     }
+
 
     // Socket.io 연결 및 실시간 이벤트 수신
     function setupSocket() {
