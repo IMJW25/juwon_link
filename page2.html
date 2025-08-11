@@ -63,7 +63,7 @@
     import { ethers } from 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js';
     
     // 스마트컨트랙트 정보
-    const CONTRACT_ADDRESS = '0xYourDeployedContractAddressHere'; // 본인 컨트랙트 주소로 변경
+    const CONTRACT_ADDRESS = '0xYourDeployedContractAddressHere'; // 실제 컨트랙트 주소
     const ABI = [
       "event LinkShared(address indexed user, string link, uint256 timestamp)",
       "function shareLink(string link) external"
@@ -72,12 +72,13 @@
     // 서버 주소
     const SERVER_URL = 'https://juwon-link-backend.onrender.com';
 
-    // URL에서 닉네임, 지갑 주소 받기
+    // URL 파라미터에서 닉네임, 지갑주소 가져오기
     const params = new URLSearchParams(window.location.search);
     const userNickname = params.get('nickname') || '익명';
     const walletAddress = params.get('wallet') || '';
 
-    document.getElementById('info').textContent = `사용자: ${userNickname} 지갑: ${walletAddress}`;
+    document.getElementById('info').textContent =
+      `사용자: ${userNickname} 지갑: ${walletAddress}`;
 
     let provider, signer, contract;
     let socket;
@@ -86,17 +87,22 @@
     function addMessageToList(user, link, timestamp) {
       const chatList = document.getElementById('chatList');
       const li = document.createElement('li');
-      const shortUser = user.slice(0,6) + '...' + user.slice(-4);
-      // timestamp는 Date 객체 또는 숫자면 적절히 포맷
-      const timeStr = (timestamp instanceof Date) ? timestamp.toLocaleString() : new Date(timestamp).toLocaleString();
+      const shortUser = user.slice(0, 6) + '...' + user.slice(-4);
+      const timeStr = (timestamp instanceof Date)
+        ? timestamp.toLocaleString()
+        : new Date(timestamp).toLocaleString();
 
-      li.innerHTML = `<span class="user">${shortUser}</span>: <a href="${link}" target="_blank" rel="noopener">${link}</a> <span class="timestamp">${timeStr}</span>`;
+      li.innerHTML =
+        `<span class="user">${shortUser}</span>: 
+         <a href="${link}" target="_blank" rel="noopener">${link}</a> 
+         <span class="timestamp">${timeStr}</span>`;
       chatList.appendChild(li);
       chatList.scrollTop = chatList.scrollHeight;
     }
 
-    // 메타마스크 연결 및 컨트랙트 세팅
+    // 메타마스크 연결
     async function connect() {
+      console.log('[DEBUG][프론트] 메타마스크 연결 시도');
       if (!window.ethereum) {
         alert('MetaMask가 필요합니다!');
         throw new Error('No MetaMask');
@@ -105,96 +111,117 @@
       await provider.send('eth_requestAccounts', []);
       signer = provider.getSigner();
       contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+      console.log('[DEBUG][프론트] 메타마스크 연결, 지갑주소:', await signer.getAddress());
     }
 
-    // 스마트컨트랙트에 링크 공유 온체인 기록
+    // 온체인 기록
     async function shareLinkOnChain(link) {
       if (!contract) await connect();
+      console.log('[DEBUG][프론트] 온체인 링크 기록 시도:', link);
       const tx = await contract.shareLink(link);
+      console.log('[DEBUG][프론트] 트랜잭션 전송, hash:', tx.hash);
       await tx.wait();
+      console.log('[DEBUG][프론트] 온체인 기록 완료!');
     }
 
-    // 서버에 링크 저장 및 Socket.io 이벤트 처리
+    // 서버 POST (링크 저장)
     async function postLinkToServer(user, link) {
-      console.log('[DEBUG][프론트] POST 요청 시작:', SERVER_URL + '/api/messages', '데이터:', { user, link });
+      console.log('[DEBUG][프론트] POST 요청:', SERVER_URL + '/api/messages', { user, link });
       try {
         const response = await fetch(`${SERVER_URL}/api/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user, link }),
         });
-
-        console.log('[DEBUG][프론트] 응답 상태 코드:', response.status);
+        console.log('[DEBUG][프론트] 응답 status:', response.status);
 
         if (!response.ok) {
           const errorText = await response.text();
           console.error('[ERROR][프론트] 서버 응답 오류:', response.status, errorText);
-          throw new Error(`서버 오류 ${response.status}`);
+          throw new Error(`서버 오류 ${response.status}: ${errorText}`);
         }
-
         const data = await response.json();
         console.log('[DEBUG][프론트] 서버 응답 데이터:', data);
         return data;
-      } catch (error) {
-        console.error('[ERROR][프론트] fetch 실패:', error);
-        throw error;
+      } catch (err) {
+        console.error('[ERROR][프론트] fetch 실패:', err);
+        throw err;
       }
     }
 
-
-    // Socket.io 연결 및 실시간 이벤트 수신
+    // 소켓 연결
     function setupSocket() {
+      console.log('[DEBUG][프론트] 소켓 연결 시도:', SERVER_URL);
       socket = io(SERVER_URL);
+      socket.on('connect', () => {
+        console.log('[DEBUG][프론트] 소켓 연결됨, ID:', socket.id);
+      });
+      socket.on('disconnect', () => {
+        console.log('[DEBUG][프론트] 소켓 연결 해제됨');
+      });
       socket.on('new-link', (data) => {
+        console.log('[DEBUG][프론트] 서버로부터 new-link 이벤트 수신:', data);
         addMessageToList(data.user, data.link, data.timestamp);
       });
     }
 
-    // 서버로부터 기존 링크 불러오기
+    // 기존 링크 로드
     async function loadExistingLinks() {
+      console.log('[DEBUG][프론트] 기존 링크 목록 불러오기');
       const res = await fetch(`${SERVER_URL}/api/messages`);
+      console.log('[DEBUG][프론트] GET /api/messages 응답 status:', res.status);
+      if (!res.ok) {
+        console.error('[ERROR][프론트] 기존 링크 로드 실패:', res.status);
+        return;
+      }
       const links = await res.json();
+      console.log('[DEBUG][프론트] 기존 링크 데이터:', links);
       links.forEach(item => addMessageToList(item.user, item.link, item.timestamp));
     }
 
-    // 공유 버튼 이벤트 핸들러
+    // 공유 버튼 이벤트
     document.getElementById('sendBtn').addEventListener('click', async () => {
       const linkInput = document.getElementById('linkInput');
       const link = linkInput.value.trim();
+      console.log('[DEBUG][프론트] 공유 버튼 클릭. 입력:', link);
+
       if (!link) {
         alert('링크를 입력하세요.');
+        console.warn('[WARN][프론트] 빈 입력값');
         return;
       }
       try {
-        new URL(link); // URL 유효성 검사
+        new URL(link);
       } catch {
         alert('올바른 URL을 입력하세요.');
+        console.warn('[WARN][프론트] URL 형식 아님');
         return;
       }
 
       try {
-        // 1) 서버에 저장 (중앙 DB + 실시간 알림)
         await postLinkToServer(walletAddress || userNickname, link);
-        // 2) 온체인 기록 (옵션)
         await shareLinkOnChain(link);
         linkInput.value = '';
+        console.log('[DEBUG][프론트] 링크 공유 절차 완료');
       } catch (err) {
-        alert('링크 공유 실패: ' + err.message);
+        console.error('[ERROR][프론트] 링크 공유 실패:', err);
+        alert('링크 공유 실패: ' + (err.message || err));
       }
     });
 
-    // 초기화 함수
+    // 초기화 실행
     (async () => {
       try {
         await connect();
         setupSocket();
         await loadExistingLinks();
+        console.log('[DEBUG][프론트] 초기화 완료');
       } catch (err) {
+        console.error('[ERROR][프론트] 초기화 실패:', err);
         alert('초기화 실패: ' + err.message);
       }
     })();
   </script>
-
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </body>
 </html>
