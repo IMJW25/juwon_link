@@ -26,7 +26,11 @@ const linkSchema = new mongoose.Schema({
 });
 const Link = mongoose.model('Link', linkSchema);
 
-app.use(cors());
+const corsOptions = {
+  origin: 'https://IMJW25.github.io/juwon_link_sharing/', // 본인 깃허브 페이지 주소 정확히!
+  credentials: true
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // 모든 링크 조회
