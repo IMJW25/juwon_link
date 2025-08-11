@@ -33,7 +33,7 @@ const io = new Server(server, {
 
 // 4. CORS 최상단에 명확하게!
 const corsOptions = {
-  origin: 'https://imjw25.github.io',   // 반드시 소문자, 슬래시/경로 없이!
+  origin: 'https://imjw25.github.io/juwon_link_sharing/',   // 반드시 소문자, 슬래시/경로 없이!
   credentials: true,
   optionsSuccessStatus: 200
 };
