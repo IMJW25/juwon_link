@@ -28,8 +28,7 @@ const linkSchema = new mongoose.Schema({
 const Link = mongoose.model('Link', linkSchema);
 
 const corsOptions = {
-  // 깃허브 페이지(정확한 배포 주소, trailing slash 없이!):
-  origin: 'https://IMJW25.github.io',
+  origin: 'https://imjw25.github.io', // 반드시 소문자! (trailing slash 없이)
   credentials: true,
   optionsSuccessStatus: 200,
 };
