@@ -1,4 +1,5 @@
-// index.js
+// index.js 상단에 추가
+const cors = require('cors');
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -27,10 +28,14 @@ const linkSchema = new mongoose.Schema({
 const Link = mongoose.model('Link', linkSchema);
 
 const corsOptions = {
-  origin: 'https://IMJW25.github.io/juwon_link_sharing/', // 본인 깃허브 페이지 주소 정확히!
-  credentials: true
+  // 깃허브 페이지(정확한 배포 주소, trailing slash 없이!):
+  origin: 'https://IMJW25.github.io',
+  credentials: true,
+  optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
 app.use(express.json());
 
 // 모든 링크 조회
